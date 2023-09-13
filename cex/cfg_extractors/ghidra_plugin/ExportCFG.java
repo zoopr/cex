@@ -19,6 +19,7 @@ import java.io.FileOutputStream;
 import java.math.BigInteger;
 import java.util.Iterator;
 import java.util.Stack;
+import java.util.function.Function;
 
 import generic.stl.Pair;
 
@@ -36,6 +37,100 @@ public class ExportCFG extends HeadlessScript {
 		if (currentProgram.getProgramContext().getRegisterValue(tmode_r, f.getEntryPoint()).getUnsignedValueIgnoreMask().compareTo(BigInteger.ONE) == 0)
 			return true;
         return false;
+    }
+
+    private Pair<String, Set<Address>> parseBlock(CodeBlock block) {
+        // We will do it with a string instead of a printstream
+        StringBuilder pout = new StringBuilder();
+
+        Set<Pair<Address, Address>> call_successors = new HashSet<>();
+        Set<Address> ret_sites = new HashSet<>();
+
+        pout.append(String.format("    {\n"));
+        pout.append(String.format("      \"addr\" : \"%#x\",\n", block.getFirstStartAddress().getOffset()));
+        pout.append(String.format("      \"instructions\" : [\n", block.getFirstStartAddress().getOffset()));
+
+        InstructionIterator iter = currentProgram.getListing().getInstructions(block, true);
+
+        while (iter.hasNext()) {
+            Instruction inst = iter.next();
+            for (PcodeOp op : inst.getPcode())
+                if (op.getOpcode() == PcodeOp.RETURN)
+                    ret_sites.add(inst.getAddress());
+
+            pout.append(String.format("        { \"addr\": \"%#x\", \"size\": %d, \"mnemonic\" : \"%s\" }", inst.getAddress().getOffset(), inst.getLength(), inst.toString()));
+            if (iter.hasNext())
+                pout.append(String.format(",\n"));
+            else
+                pout.append(String.format("\n"));
+
+            FlowType ft = inst.getFlowType();
+            if (ft != null && ft.isCall()) {
+                for (Address dst : inst.getFlows()) {
+                    call_successors.add(new Pair<>(dst, inst.getAddress()));
+                }
+            }
+            if (ft != null && ft.isComputed()) {
+                for (Address dst : inst.getFlows()) {
+                    if (getFunctionAt(dst) != null)
+                        call_successors.add(new Pair<>(dst, inst.getAddress()));
+                }
+            }
+        }
+        pout.append(String.format("      ],\n"));
+
+        pout.append(String.format("      \"successors\" : [\n"));
+        boolean first_iter_insts = true;
+        CodeBlockReferenceIterator succ_iter = block.getDestinations(monitor);
+        while (succ_iter.hasNext()) {
+            CodeBlockReference succ_ref = succ_iter.next();
+            if (succ_ref.getFlowType().isCall())
+                continue;
+
+            CodeBlock succ = succ_ref.getDestinationBlock();
+            Address dst = succ.getFirstStartAddress();
+            if (succ_ref.getFlowType().isComputed() && getFunctionAt(dst) != null)
+                // It is a call
+                continue;
+
+            if (!first_iter_insts)
+                pout.append(String.format(",\n"));
+            else
+                first_iter_insts = false;
+            
+            if (!visited.contains(succ) && succ != null)
+                stack.push(succ);
+            pout.append(String.format("        \"%#x\"", succ.getFirstStartAddress().getOffset()));
+        }
+        pout.append(String.format("\n"));
+        pout.append(String.format("      ],\n"));
+
+        pout.append(String.format("      \"calls\" : [\n"));
+        Iterator<Pair<Address, Address>> calls = call_successors.iterator();
+        while(calls.hasNext()) {
+            Pair<Address, Address> call = calls.next();
+            if (external_functions.contains(call.first.getOffset())) {
+                Function ext_f = getFunctionAt(call.first);
+                if (ext_f != null) {
+                    pout.append(String.format("        { \"name\": \"%s\", \"callsite\" : \"%#x\", \"type\" : \"external\" }",
+                            ext_f.getName(), call.second.getOffset()));
+                }
+            } else {
+                pout.append(String.format("        { \"offset\": \"%#x\", \"callsite\" : \"%#x\", \"type\" : \"normal\" }",
+                        call.first.getOffset(), call.second.getOffset()));
+            }
+            if (calls.hasNext())
+                pout.append(String.format(",\n"));
+            else
+                pout.append(String.format("\n"));
+        }
+        pout.append(String.format("      ]\n"));
+
+        if (stack.empty())
+            pout.append(String.format("    }\n"));
+        else
+            pout.append(String.format("    },\n"));
+        return new Pair<String, Set<Address>>(pout.toString(), ret_sites);
     }
 
     public void run() throws Exception {
@@ -112,90 +207,9 @@ public class ExportCFG extends HeadlessScript {
                 CodeBlock block = stack.pop();
                 visited.add(block);
 
-                Set<Pair<Address, Address>> call_successors = new HashSet<>();
-
-                pout.format("    {\n");
-                pout.format("      \"addr\" : \"%#x\",\n", block.getFirstStartAddress().getOffset());
-                pout.format("      \"instructions\" : [\n", block.getFirstStartAddress().getOffset());
-                InstructionIterator iter = currentProgram.getListing().getInstructions(block, true);
-                while (iter.hasNext()) {
-                    Instruction inst = iter.next();
-                    for (PcodeOp op : inst.getPcode())
-                        if (op.getOpcode() == PcodeOp.RETURN)
-                            ret_sites.add(inst.getAddress());
-
-                    pout.format("        { \"addr\": \"%#x\", \"size\": %d, \"mnemonic\" : \"%s\" }", inst.getAddress().getOffset(), inst.getLength(), inst.toString());
-                    if (iter.hasNext())
-                        pout.format(",\n");
-                    else
-                        pout.format("\n");
-
-                    FlowType ft = inst.getFlowType();
-                    if (ft != null && ft.isCall()) {
-	                    for (Address dst : inst.getFlows()) {
-	                    	call_successors.add(new Pair<>(dst, inst.getAddress()));
-	                    }
-                    }
-                    if (ft != null && ft.isComputed()) {
-	                    for (Address dst : inst.getFlows()) {
-	                    	if (getFunctionAt(dst) != null)
-	                    		call_successors.add(new Pair<>(dst, inst.getAddress()));
-	                    }
-                    }
-                }
-                pout.format("      ],\n");
-
-                pout.format("      \"successors\" : [\n");
-                boolean first_iter_insts = true;
-                CodeBlockReferenceIterator succ_iter = block.getDestinations(monitor);
-                while (succ_iter.hasNext()) {
-                    CodeBlockReference succ_ref = succ_iter.next();
-                    if (succ_ref.getFlowType().isCall())
-                        continue;
-
-                    CodeBlock succ = succ_ref.getDestinationBlock();
-                    Address dst = succ.getFirstStartAddress();
-                    if (succ_ref.getFlowType().isComputed() && getFunctionAt(dst) != null)
-                    	// It is a call
-                    	continue;
-
-                    if (!first_iter_insts)
-                        pout.format(",\n");
-                    else
-                        first_iter_insts = false;
-                    
-                    if (!visited.contains(succ) && succ != null)
-                        stack.push(succ);
-                    pout.format("        \"%#x\"", succ.getFirstStartAddress().getOffset());
-                }
-                pout.format("\n");
-                pout.format("      ],\n");
-
-                pout.format("      \"calls\" : [\n");
-                Iterator<Pair<Address, Address>> calls = call_successors.iterator();
-                while(calls.hasNext()) {
-                    Pair<Address, Address> call = calls.next();
-                    if (external_functions.contains(call.first.getOffset())) {
-                    	Function ext_f = getFunctionAt(call.first);
-                    	if (ext_f != null) {
-                    		pout.format("        { \"name\": \"%s\", \"callsite\" : \"%#x\", \"type\" : \"external\" }",
-    								ext_f.getName(), call.second.getOffset());
-                    	}
-                    } else {
-                    	pout.format("        { \"offset\": \"%#x\", \"callsite\" : \"%#x\", \"type\" : \"normal\" }",
-                    			call.first.getOffset(), call.second.getOffset());
-                    }
-                    if (calls.hasNext())
-                        pout.format(",\n");
-                    else
-                        pout.format("\n");
-                }
-                pout.format("      ]\n");
-
-                if (stack.empty())
-                    pout.format("    }\n");
-                else
-                    pout.format("    },\n");
+                Pair<String, Set<Address>> res = parseBlock(block);
+                ret_sites.addAll(res.getValue());
+                pout.format(res.getKey());
             }
             pout.format("  ],\n");
 
