@@ -6,7 +6,7 @@ import networkx as nx
 
 from cex.cfg_extractors import (
     CFGNodeData, CFGInstruction, CGNodeData, ICfgExtractor)
-from cex.cfg_extractors.utils import check_pie, get_md5_file
+from cex.cfg_extractors.utils import check_pie, get_sha256_file
 
 
 class RizinBinaryData(object):
@@ -42,8 +42,8 @@ class RZCfgExtractor(ICfgExtractor):
         return symb_name
 
     def _open_rz(self, binary):
-        binary_md5 = get_md5_file(binary)
-        proj_name = os.path.join(self.get_tmp_folder(), "rizin_proj_%s.rzdb" % binary_md5)
+        binary_sha256 = get_sha256_file(binary)
+        proj_name = os.path.join(self.get_tmp_folder(), "rizin_proj_%s.rzdb" % binary_sha256)
 
         if not RZCfgExtractor.USE_PROJECTS or not os.path.exists(proj_name):
             flags=list()
@@ -56,7 +56,7 @@ class RZCfgExtractor(ICfgExtractor):
             rz.cmd("aaaa")  # run also emulation stage
 
             if RZCfgExtractor.USE_PROJECTS:
-                proj_name = os.path.join(self.get_tmp_folder(), "rizin_proj_%s.rzdb" % binary_md5)
+                proj_name = os.path.join(self.get_tmp_folder(), "rizin_proj_%s.rzdb" % binary_sha256)
                 rz.cmd("Ps %s" % proj_name)
         else:
             rz = rzpipe.open(binary)

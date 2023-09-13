@@ -88,7 +88,7 @@ class ASensorManager_createEventQueue(angr.SimProcedure):
 
 class AngrCfgExtractorEmulated(AngrCfgExtractor, IMultilibCfgExtractor):
     log = logging.getLogger("cex.AngrCfgExtractorEmulated")
-    # log.setLevel(logging.INFO)
+    log.setLevel(logging.INFO)
 
     def __init__(self):
         super().__init__()

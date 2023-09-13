@@ -7,7 +7,7 @@ import subprocess
 import networkx as nx
 
 from cex.cfg_extractors import CFGNodeData, CFGInstruction, CGNodeData, ICfgExtractor, ExtCallInfo
-from cex.cfg_extractors.utils import check_pie, get_md5_file
+from cex.cfg_extractors.utils import check_pie, get_sha256_file
 
 
 class GhidraBinaryData(object):
@@ -127,8 +127,8 @@ class GhidraCfgExtractor(ICfgExtractor):
         return "GHIDRA_HOME" in os.environ
 
     def get_project_path(self, binary):
-        binary_md5 = get_md5_file(binary)
-        proj_name  = "ghidra_proj_" + binary_md5  + ".gpr"
+        binary_sha256 = get_sha256_file(binary)
+        proj_name  = "ghidra_proj_" + binary_sha256  + ".gpr"
         proj_path  = os.path.join(self.get_tmp_folder(), proj_name)
         if not os.path.exists(proj_path):
             ghidra_home = os.environ["GHIDRA_HOME"]
@@ -150,8 +150,8 @@ class GhidraCfgExtractor(ICfgExtractor):
         binary_fullpath = binary
         ghidra_home     = os.environ["GHIDRA_HOME"]
 
-        binary_md5 = get_md5_file(binary)
-        proj_name  = "ghidra_proj_" + binary_md5  + ".gpr"
+        binary_sha256 = get_sha256_file(binary)
+        proj_name  = "ghidra_proj_" + binary_sha256  + ".gpr"
         if os.path.exists(os.path.join(self.get_tmp_folder(), proj_name)):
             cmd = GhidraCfgExtractor.CMD_CUSTOM_FUNCTIONS_USE_EXISTING[:]
             binary = os.path.basename(binary)
@@ -175,8 +175,8 @@ class GhidraCfgExtractor(ICfgExtractor):
         binary_fullpath = binary
         ghidra_home     = os.environ["GHIDRA_HOME"]
 
-        binary_md5 = get_md5_file(binary)
-        proj_name  = "ghidra_proj_" + binary_md5  + ".gpr"
+        binary_sha256 = get_sha256_file(binary)
+        proj_name  = "ghidra_proj_" + binary_sha256  + ".gpr"
         if os.path.exists(os.path.join(self.get_tmp_folder(), proj_name)):
             cmd = GhidraCfgExtractor.CMD_CFG_USE_EXISTING[:]
             binary = os.path.basename(binary)
@@ -200,8 +200,8 @@ class GhidraCfgExtractor(ICfgExtractor):
         binary_fullpath = binary
         ghidra_home     = os.environ["GHIDRA_HOME"]
 
-        binary_md5 = get_md5_file(binary)
-        proj_name  = "ghidra_proj_" + binary_md5  + ".gpr"
+        binary_sha256 = get_sha256_file(binary)
+        proj_name  = "ghidra_proj_" + binary_sha256  + ".gpr"
         if os.path.exists(os.path.join(self.get_tmp_folder(), proj_name)):
             cmd = GhidraCfgExtractor.CMD_CG_USE_EXISTING[:]
             binary = os.path.basename(binary)
@@ -226,8 +226,8 @@ class GhidraCfgExtractor(ICfgExtractor):
             self.data[binary] = GhidraBinaryData()
 
         if self.data[binary].cfg_raw is None:
-            binary_md5    = get_md5_file(binary)
-            cfg_json_name = "ghidra_cfg_" + binary_md5  + ".json"
+            binary_sha256    = get_sha256_file(binary)
+            cfg_json_name = "ghidra_cfg_" + binary_sha256  + ".json"
             cfg_json_path = os.path.join(self.get_tmp_folder(), cfg_json_name)
             if not os.path.exists(cfg_json_path):
                 cmd = self._get_cmd_cfg(binary, cfg_json_path)
@@ -238,7 +238,15 @@ class GhidraCfgExtractor(ICfgExtractor):
                     GhidraCfgExtractor.log.warning("CFG: Timeout elapsed on %s" % binary)
 
             with open(cfg_json_path, "r") as fin:
-                cfg_raw = json.load(fin)
+                try:
+                    cfg_raw = json.load(fin)
+                except Exception as e:
+                    print(f"Error loading JSON at {fin}: {e}")
+                    flines = fin.read()
+                    print(flines)
+                    print("###")
+                    exit(1)
+
 
             self.data[binary].cfg_raw = cfg_raw
 
@@ -247,8 +255,8 @@ class GhidraCfgExtractor(ICfgExtractor):
             self.data[binary] = GhidraBinaryData()
 
         if self.data[binary].cg_raw is None:
-            binary_md5    = get_md5_file(binary)
-            cg_json_name = "ghidra_cg_" + binary_md5  + ".json"
+            binary_sha256    = get_sha256_file(binary)
+            cg_json_name = "ghidra_cg_" + binary_sha256  + ".json"
             cg_json_path = os.path.join(self.get_tmp_folder(), cg_json_name)
             if not os.path.exists(cg_json_path):
                 cmd = self._get_cmd_cg(binary, cg_json_path)
@@ -265,7 +273,7 @@ class GhidraCfgExtractor(ICfgExtractor):
 
     def define_functions(self, binary, offsets):
         infile = os.path.join(
-            self.get_tmp_folder(), get_md5_file(binary) + "_offsets.txt")
+            self.get_tmp_folder(), get_sha256_file(binary) + "_offsets.txt")
         with open(infile, "w") as fout:
             for off in offsets:
                 fout.write("%#x\n" % off)
@@ -445,10 +453,10 @@ class GhidraCfgExtractor(ICfgExtractor):
         self.data[binary].acc_cg    = None
         self.data[binary].ext_calls = dict()
 
-        binary_md5    = get_md5_file(binary)
-        cg_json_name  = "ghidra_cg_" + binary_md5  + ".json"
+        binary_sha256    = get_sha256_file(binary)
+        cg_json_name  = "ghidra_cg_" + binary_sha256  + ".json"
         cg_json_path  = os.path.join(self.get_tmp_folder(), cg_json_name)
-        cfg_json_name = "ghidra_cfg_" + binary_md5  + ".json"
+        cfg_json_name = "ghidra_cfg_" + binary_sha256  + ".json"
         cfg_json_path = os.path.join(self.get_tmp_folder(), cfg_json_name)
 
         if os.path.exists(cg_json_path):
