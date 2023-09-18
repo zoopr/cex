@@ -169,6 +169,7 @@ class GhidraCfgExtractor(ICfgExtractor):
 
         if check_pie(binary_fullpath):
             cmd += GhidraCfgExtractor.CMD_PIE_ELF
+        print(f"Generated CMD: {' '.join(cmd)}")
         return cmd
 
     def _get_cmd_cfg(self, binary, outfile):
@@ -194,6 +195,7 @@ class GhidraCfgExtractor(ICfgExtractor):
 
         if check_pie(binary_fullpath):
             cmd += GhidraCfgExtractor.CMD_PIE_ELF
+        print(f"Generated CMD: {' '.join(cmd)}")
         return cmd
 
     def _get_cmd_cg(self, binary, outfile):
@@ -219,6 +221,7 @@ class GhidraCfgExtractor(ICfgExtractor):
 
         if check_pie(binary_fullpath):
             cmd += GhidraCfgExtractor.CMD_PIE_ELF
+        print(f"Generated CMD: {' '.join(cmd)}")
         return cmd
 
     def _load_cfg_raw(self, binary):

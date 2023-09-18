@@ -19,12 +19,20 @@ import java.io.FileOutputStream;
 import java.math.BigInteger;
 import java.util.Iterator;
 import java.util.Stack;
-import java.util.function.Function;
+// import java.util.function.Function;
 
 import generic.stl.Pair;
 
 import java.util.HashSet;
 import java.util.Set;
+import java.util.List;
+import java.util.ArrayList; 
+
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 public class ExportCFG extends HeadlessScript {
     boolean is_arm;
@@ -39,12 +47,78 @@ public class ExportCFG extends HeadlessScript {
         return false;
     }
 
-    private Pair<String, Set<Address>> parseBlock(CodeBlock block) {
+    private static class BlockRes {
+        Set<Address> ret_sites = new HashSet<Address>();
+        Stack<CodeBlock> stack = new Stack<CodeBlock>();
+        String json = "";
+    }
+
+    private String parseFunc(Function f, HashSet<Long> external_functions, SimpleBlockModel model) throws ghidra.util.exception.CancelledException {
+        // if (f.isExternal() || f.isThunk()) {
+        //     continue;
+        // }
+
+        StringBuilder pout = new StringBuilder();
+
+        pout.append(String.format(" {\n"));
+        pout.append(String.format("  \"name\": \"%s\",\n", f.getName().replace('"', '_')));
+        pout.append(String.format("  \"addr\": \"%#x\",\n", f.getEntryPoint().getOffset()));
+        pout.append(String.format("  \"is_returning\" : \"%s\",\n", f.hasNoReturn() ? "false" : "true"));
+        pout.append(String.format("  \"is_thumb\" : \"%s\",\n", isThumb(f) ? "true" : "false"));
+        pout.append(String.format("  \"blocks\": [\n"));
+        CodeBlock entry_block  = model.getCodeBlockAt(f.getEntryPoint(), monitor);
+        if (entry_block == null) {
+            pout.append(String.format("  ],\n"));
+            pout.append(String.format("  \"return_sites\" : [\n"));
+            pout.append(String.format("  ]\n"));
+            pout.append(String.format("    }\n"));
+            return pout.toString();
+        }
+
+        Set<Address> ret_sites = new HashSet<Address>();
+        Stack<CodeBlock> stack = new Stack<CodeBlock>();
+        Set<CodeBlock> visited = new HashSet<CodeBlock>();
+        stack.push(entry_block);
+
+        while (!stack.empty()) {
+            CodeBlock block = stack.pop();
+            visited.add(block);
+
+            BlockRes res = parseBlock(block, external_functions);
+            ret_sites.addAll(res.ret_sites);
+            pout.append(String.format(res.json));
+            for (CodeBlock x:res.stack){
+                if (!visited.contains(x))
+                    stack.push(x);
+            }
+
+            if (!stack.empty()) {
+                pout.append(String.format(",\n"));
+            }
+        }
+        pout.append(String.format("  ],\n"));
+
+        boolean need_comma = false;
+        pout.append(String.format("  \"return_sites\" : [\n"));
+        for (Address r : ret_sites) {
+            if (need_comma)
+                pout.append(String.format(",\n"));
+            else
+                need_comma = true;
+            pout.append(String.format("    \"%#x\"", r.getOffset()));
+        }
+        pout.append(String.format("\n  ]\n"));
+        pout.append(String.format(" }\n"));
+        printf("Finished Function string: %s\n", pout.toString());
+        return pout.toString();
+    }
+
+    private BlockRes parseBlock(CodeBlock block, HashSet<Long> external_functions) throws ghidra.util.exception.CancelledException {
         // We will do it with a string instead of a printstream
         StringBuilder pout = new StringBuilder();
 
-        Set<Pair<Address, Address>> call_successors = new HashSet<>();
-        Set<Address> ret_sites = new HashSet<>();
+        BlockRes res = new BlockRes();
+        Set<Pair<Address, Address>> call_successors = new HashSet<Pair<Address, Address>>();
 
         pout.append(String.format("    {\n"));
         pout.append(String.format("      \"addr\" : \"%#x\",\n", block.getFirstStartAddress().getOffset()));
@@ -56,7 +130,7 @@ public class ExportCFG extends HeadlessScript {
             Instruction inst = iter.next();
             for (PcodeOp op : inst.getPcode())
                 if (op.getOpcode() == PcodeOp.RETURN)
-                    ret_sites.add(inst.getAddress());
+                    res.ret_sites.add(inst.getAddress());
 
             pout.append(String.format("        { \"addr\": \"%#x\", \"size\": %d, \"mnemonic\" : \"%s\" }", inst.getAddress().getOffset(), inst.getLength(), inst.toString()));
             if (iter.hasNext())
@@ -98,8 +172,8 @@ public class ExportCFG extends HeadlessScript {
             else
                 first_iter_insts = false;
             
-            if (!visited.contains(succ) && succ != null)
-                stack.push(succ);
+            if (succ != null)
+                res.stack.push(succ);
             pout.append(String.format("        \"%#x\"", succ.getFirstStartAddress().getOffset()));
         }
         pout.append(String.format("\n"));
@@ -126,11 +200,10 @@ public class ExportCFG extends HeadlessScript {
         }
         pout.append(String.format("      ]\n"));
 
-        if (stack.empty())
-            pout.append(String.format("    }\n"));
-        else
-            pout.append(String.format("    },\n"));
-        return new Pair<String, Set<Address>>(pout.toString(), ret_sites);
+        pout.append(String.format("    }\n"));
+        res.json = pout.toString();
+        printf("Finished block string: %s\n", pout.toString());
+        return res;
     }
 
     public void run() throws Exception {
@@ -171,64 +244,20 @@ public class ExportCFG extends HeadlessScript {
 
         FunctionIterator iter_functions = listing.getFunctions(true);
 
-        boolean first_iter_functions = true;
         pout.format("[\n");
+
+        List<String> func_jsonObjects = new ArrayList();
+
         while (iter_functions.hasNext() && !monitor.isCancelled()) {
             Function f = iter_functions.next();
-            // if (f.isExternal() || f.isThunk()) {
-            //     continue;
-            // }
-
-            if (!first_iter_functions)
-                pout.format(" },\n");
-            else
-                first_iter_functions = false;
-
-            pout.format(" {\n");
-            pout.format("  \"name\": \"%s\",\n", f.getName().replace('"', '_'));
-            pout.format("  \"addr\": \"%#x\",\n", f.getEntryPoint().getOffset());
-            pout.format("  \"is_returning\" : \"%s\",\n", f.hasNoReturn() ? "false" : "true");
-            pout.format("  \"is_thumb\" : \"%s\",\n", isThumb(f) ? "true" : "false");
-            pout.format("  \"blocks\": [\n");
-            CodeBlock entry_block  = model.getCodeBlockAt(f.getEntryPoint(), monitor);
-            if (entry_block == null) {
-                pout.format("  ],\n");
-                pout.format("  \"return_sites\" : [\n");
-                pout.format("  ]\n");
-                continue;
-            }
-
-            Set<Address> ret_sites = new HashSet<>();
-            Stack<CodeBlock> stack = new Stack<>();
-            Set<CodeBlock> visited = new HashSet<>();
-            stack.push(entry_block);
-
-            while (!stack.empty()) {
-                CodeBlock block = stack.pop();
-                visited.add(block);
-
-                Pair<String, Set<Address>> res = parseBlock(block);
-                ret_sites.addAll(res.getValue());
-                pout.format(res.getKey());
-            }
-            pout.format("  ],\n");
-
-            boolean need_comma = false;
-            pout.format("  \"return_sites\" : [\n");
-            for (Address r : ret_sites) {
-                if (need_comma)
-                    pout.format(",\n");
-                else
-                    need_comma = true;
-                pout.format("    \"%#x\"", r.getOffset());
-            }
-            pout.format("\n  ]\n");
+            func_jsonObjects.add(parseFunc(f,external_functions,model));
         }
-        if (!first_iter_functions)
-            pout.format(" }\n");
+        pout.format(String.join(",\n", func_jsonObjects));
+
         pout.format("]\n");
 
-        fout.close();
+
         pout.close();
+        fout.close();
     }
 }
