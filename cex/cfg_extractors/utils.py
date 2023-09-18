@@ -11,7 +11,7 @@ def check_pie(binary):
     rz.quit()
     return res
 
-def get_sha256_file(filename):
+def get_md5_file(filename):
     with open(filename,'rb') as f_binary:
-        res = hashlib.sha256(f_binary.read()).hexdigest()
-    return res
+        md5 = hashlib.md5(f_binary.read()).hexdigest()
+    return md5

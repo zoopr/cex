@@ -1,7 +1,7 @@
 import rzpipe
 import os
 
-from .cfg_extractors.utils import get_sha256_file
+from .cfg_extractors.utils import get_md5_file
 from collections import namedtuple
 
 FunctionDescription = namedtuple("FunctionDescription", ["name", "offset", "is_exported"])
@@ -24,7 +24,7 @@ class BinInfo(object):
     def __init__(self, bin, addr=None):
         self.path = bin
         self.name = os.path.basename(bin)
-        self.hash = get_sha256_file(bin)
+        self.hash = get_md5_file(bin)
 
         self.min_addr = addr or 0x400000
 
