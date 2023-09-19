@@ -19,7 +19,6 @@ import java.io.FileOutputStream;
 import java.math.BigInteger;
 import java.util.Iterator;
 import java.util.Stack;
-// import java.util.function.Function;
 
 import generic.stl.Pair;
 
@@ -33,6 +32,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.function.Function;
 
 public class ExportCFG extends HeadlessScript {
     boolean is_arm;
@@ -58,7 +58,7 @@ public class ExportCFG extends HeadlessScript {
         //     continue;
         // }
 
-        StringBuilder pout = new StringBuilder();
+        StringBuffer pout = new StringBuffer();
 
         pout.append(String.format(" {\n"));
         pout.append(String.format("  \"name\": \"%s\",\n", f.getName().replace('"', '_')));
@@ -80,22 +80,32 @@ public class ExportCFG extends HeadlessScript {
         Set<CodeBlock> visited = new HashSet<CodeBlock>();
         stack.push(entry_block);
 
-        while (!stack.empty()) {
-            CodeBlock block = stack.pop();
-            visited.add(block);
+        ExecutorService es = Executors.newFixedThreadPool(8); //TODO: dynamic thread number 
 
-            BlockRes res = parseBlock(block, external_functions);
-            ret_sites.addAll(res.ret_sites);
-            pout.append(String.format(res.json));
-            for (CodeBlock x:res.stack){
-                if (!visited.contains(x))
-                    stack.push(x);
+        while (!stack.empty()) { 
+            List<Callable<BlockRes>> tasks = new ArrayList<Callable<BlockRes>>();
+            for (CodeBlock cb : stack){
+                Callable<BlockRes> c = new Callable<BlockRes>() {
+                    @Override
+                    public BlockRes call() throws Exception {
+                        return parsseBlock(cb, external_functions);
+                    }
+                };
+                tasks.add(c);
+                visited.add(cb);
             }
-
-            if (!stack.empty()) {
-                pout.append(String.format(",\n"));
-            }
+            List<Future<BlockRes>> results =es.invokeAll(tasks, 0, null);
+            for (Future<BlockRes> fr: results){
+                res = fr.get();
+                ret_sites.addAll(res.ret_sites);
+                pout.append(String.format(res.json));
+                for (CodeBlock x:res.stack){
+                    if (!visited.contains(x))
+                        stack.push(x);
+                }
+            }   
         }
+        pout.deleteCharAt(pout.length() - 1); // Remove last comma
         pout.append(String.format("  ],\n"));
 
         boolean need_comma = false;
@@ -115,7 +125,7 @@ public class ExportCFG extends HeadlessScript {
 
     private BlockRes parseBlock(CodeBlock block, HashSet<Long> external_functions) throws ghidra.util.exception.CancelledException {
         // We will do it with a string instead of a printstream
-        StringBuilder pout = new StringBuilder();
+        StringBuffer pout = new StringBuffer();
 
         BlockRes res = new BlockRes();
         Set<Pair<Address, Address>> call_successors = new HashSet<Pair<Address, Address>>();
@@ -200,7 +210,7 @@ public class ExportCFG extends HeadlessScript {
         }
         pout.append(String.format("      ]\n"));
 
-        pout.append(String.format("    }\n"));
+        pout.append(String.format("    }\n,"));
         res.json = pout.toString();
         printf("Finished block string: %s\n", pout.toString());
         return res;
