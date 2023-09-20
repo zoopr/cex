@@ -1,5 +1,7 @@
 import ghidra.app.util.headless.HeadlessScript;
 
+import ghidra.program.model.listing.Function;
+
 import ghidra.program.model.util.*;
 import ghidra.program.model.reloc.*;
 import ghidra.program.model.data.*;
@@ -19,7 +21,6 @@ import java.io.FileOutputStream;
 import java.math.BigInteger;
 import java.util.Iterator;
 import java.util.Stack;
-// import java.util.function.Function;
 
 import generic.stl.Pair;
 
@@ -27,12 +28,6 @@ import java.util.HashSet;
 import java.util.Set;
 import java.util.List;
 import java.util.ArrayList; 
-
-import java.util.concurrent.Callable;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
 
 public class ExportCFG extends HeadlessScript {
     boolean is_arm;
@@ -250,10 +245,11 @@ public class ExportCFG extends HeadlessScript {
 
         while (iter_functions.hasNext() && !monitor.isCancelled()) {
             Function f = iter_functions.next();
-            func_jsonObjects.add(parseFunc(f,external_functions,model));
+            pout.format(parseFunc(f,external_functions,model));
+            if (iter_functions.hasNext()){
+                pout.format(",\n");
+            }
         }
-        pout.format(String.join(",\n", func_jsonObjects));
-
         pout.format("]\n");
 
 
