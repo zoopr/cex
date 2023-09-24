@@ -143,7 +143,7 @@ class GhidraCfgExtractor(ICfgExtractor):
             if check_pie(binary):
                 cmd += GhidraCfgExtractor.CMD_PIE_ELF
 
-            subprocess.check_call(cmd, stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
+            subprocess.check_call(cmd, stderr=subprocess.STDOUT, stdout=subprocess.STDOUT)
         return proj_path
 
     def _get_cmd_custom_functions(self, binary, infile):
@@ -235,7 +235,7 @@ class GhidraCfgExtractor(ICfgExtractor):
             if not os.path.exists(cfg_json_path):
                 cmd = self._get_cmd_cfg(binary, cfg_json_path)
                 start = time.time()
-                subprocess.check_call(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                subprocess.check_call(cmd, stdout=subprocess.STDOUT, stderr=subprocess.STDOUT)
                 elapsed = time.time() - start
                 if elapsed >= float(self.timeout):
                     GhidraCfgExtractor.log.warning("CFG: Timeout elapsed on %s" % binary)
@@ -256,7 +256,7 @@ class GhidraCfgExtractor(ICfgExtractor):
             if not os.path.exists(cg_json_path):
                 cmd = self._get_cmd_cg(binary, cg_json_path)
                 start = time.time()
-                subprocess.check_call(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                subprocess.check_call(cmd, stdout=subprocess.STDOUT, stderr=subprocess.STDOUT)
                 elapsed = time.time() - start
                 if elapsed >= float(self.timeout):
                     GhidraCfgExtractor.log.warning("CG: Timeout elapsed on %s" % binary)
@@ -275,7 +275,7 @@ class GhidraCfgExtractor(ICfgExtractor):
 
         cmd = self._get_cmd_custom_functions(binary, infile)
         start = time.time()
-        out = subprocess.check_output(cmd, stderr=subprocess.DEVNULL)
+        out = subprocess.check_output(cmd, stderr=subprocess.STDOUT)
         elapsed = time.time() - start
         if elapsed >= float(self.timeout):
             GhidraCfgExtractor.log.warning("DEF_FUNCS: Timeout elapsed on %s" % binary)

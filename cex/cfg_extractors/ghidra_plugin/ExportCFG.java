@@ -104,7 +104,7 @@ public class ExportCFG extends HeadlessScript {
         }
         pout.append(String.format("\n  ]\n"));
         pout.append(String.format(" }\n"));
-        printf("Finished Function string: %s\n", pout.toString());
+        // printf("Finished Function string: %s\n", pout.toString());
         return pout.toString();
     }
 
@@ -117,7 +117,7 @@ public class ExportCFG extends HeadlessScript {
 
         pout.append(String.format("    {\n"));
         pout.append(String.format("      \"addr\" : \"%#x\",\n", block.getFirstStartAddress().getOffset()));
-        pout.append(String.format("      \"instructions\" : [\n", block.getFirstStartAddress().getOffset()));
+        pout.append(String.format("      \"instructions\" : [\n"));
 
         InstructionIterator iter = currentProgram.getListing().getInstructions(block, true);
 
@@ -197,7 +197,7 @@ public class ExportCFG extends HeadlessScript {
 
         pout.append(String.format("    }\n"));
         res.json = pout.toString();
-        printf("Finished block string: %s\n", pout.toString());
+        //printf("Finished block string: %s\n", pout.toString());
         return res;
     }
 
@@ -222,7 +222,7 @@ public class ExportCFG extends HeadlessScript {
             printf("Failed opening output file: Exception %s\n", e.toString());
             return;
         }
-        PrintStream pout = new PrintStream(fout);
+        PrintStream pout = new PrintStream(fout,true);
 
         // The actual thing
         SimpleBlockModel model = new SimpleBlockModel(currentProgram);
@@ -249,6 +249,10 @@ public class ExportCFG extends HeadlessScript {
             if (iter_functions.hasNext()){
                 pout.format(",\n");
             }
+            if (pout.checkError()) {
+                printf("Printstream reached error!");
+                break;
+            }    
         }
         pout.format("]\n");
 
