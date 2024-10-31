@@ -315,7 +315,34 @@ class CEXProject(object):
 
         res_g = res_g.subgraph(nx.dfs_postorder_nodes(res_g, entry)).copy()
         return normalize_graph(entry, res_g)
-
+    
+    # Extend static analysis ICFGs with the knowledge of a confirmed Producer-Consumer method pair.
+    # The lax method simply connects the lowest return nodes to the entry node of the producer. 
+    # This is mildly inaccurate because the real ICFG will have unknown interactions on the Java layer between them, but it does create a known connection between the graphs.
+    # The fine method tries to build the extended ICFG by emulating producer execution and carrying over the memory layout to consumer emulation.
+    # Then, the call procedures are hooked and compared to the known ICFG for each function. Each divergence is added to the known ICFG.
+    # This significantly enhances reachability coverage in code paths belonging to the consumer, but reliant on the native object from the producer.
+    def extended_cp_merge_icfgs_lax(self, entry_producer, entry_consumer):
+        # Similar to multilib merging, but we have to add our own edge.
+        icfg_producer = self.get_icfg(entry_producer)
+        icfg_consumer = self.get_icfg(entry_consumer)
+        # Get leaf return nodes from producer, connect all of them to consumer. This is very rough, 
+        # but the general idea of all producer bottom-level returns being connected to the same consumer entry point is sound.
+        ret_nodes = [x for x in icfg_producer.nodes() if icfg_producer.out_degree(x)==0 and icfg_producer.in_degree(x)==1]
+        union_graph = nx.union(icfg_producer,icfg_consumer,rename=("prod-","cons-"))
+        for rn in ret_nodes:
+            union_graph.add_edge(rn, entry_consumer)
+        return normalize_graph(entry_producer, union_graph)
+    
+    def extended_cp_merge_icfgs_fine(self, entry_producer, entry_consumer, obj_positional_num):
+        united_icfg=self.extended_cp_merge_icfgs_lax(entry_producer,entry_consumer)
+        #TODO: Load emulation-related procedures from Angr plugin.
+        #Steps:
+        #TODO: Get right plugin and internal functions.
+        #TODO: Emulate producer execution, retrieve return pointer and memory state
+        #TODO: Manipulate consumer state to add memory state and place native ptr in OBJ_POSITIONAL_NUM
+        #TODO: emulate consumer, enrich consumer ICFG.
+    
     def get_depgraph(self):
         if self._lib_dep_graph is not None:
             return self._lib_dep_graph
