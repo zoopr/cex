@@ -147,7 +147,7 @@ class AngrCfgExtractor(ICfgExtractor):
                 h = proj.hooked_by(s.rebased_addr)
                 if h is None or h.cc is None:
                     continue
-                fun_ty = h.cc.func_ty
+                fun_ty = h.prototype
                 if fun_ty is None or not hasattr(fun_ty.returnty, "name"):
                     continue
                 if "double" in fun_ty.returnty.name or "float" in fun_ty.returnty.name:
