@@ -148,9 +148,9 @@ class AngrCfgExtractor(ICfgExtractor):
                 if h is None or h.cc is None:
                     continue
                 fun_ty = h.prototype
-                if fun_ty is None or not hasattr(fun_ty.returnty, "name"):
+                if fun_ty is None:
                     continue
-                if "double" in fun_ty.returnty.name or "float" in fun_ty.returnty.name:
+                if "double" in fun_ty.returnty.c_repr() or "float" in fun_ty.returnty.c_repr():
                     float_functions.add(h.display_name)
 
         to_hook = float_functions
